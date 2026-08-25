@@ -1,0 +1,19 @@
+﻿{
+    "sandbox_runtime":  "gVisor runsc / Podman OCI",
+    "status":  "PASS",
+    "timestamp":  "2026-08-25T20:45:25Z",
+    "isolation_parameters":  {
+                                 "pids_limit":  256,
+                                 "memory_limit_enforced":  true,
+                                 "cap_drop":  "ALL",
+                                 "unprivileged_user":  "10001:10001",
+                                 "cpu_quota_enforced":  true,
+                                 "read_only_root":  true
+                             },
+    "threat_containment":  {
+                               "fork_bomb":  "CONTAINED (pids-limit=256)",
+                               "cryptominer_signature_filter":  "BLOCKED (xmrig, coinhive, monero, stratum)",
+                               "host_filesystem_tampering":  "BLOCKED (read-only rootfs, isolated tmpfs)",
+                               "privilege_escalation":  "BLOCKED (no-new-privileges, cap-drop ALL)"
+                           }
+}

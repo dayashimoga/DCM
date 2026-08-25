@@ -1,0 +1,33 @@
+﻿{
+    "timestamp":  "2026-08-25T20:45:25Z",
+    "runtime":  "k3s v1.30.0 (ephemeral podman container)",
+    "horizontal_pod_autoscaler":  {
+                                      "minReplicas":  3,
+                                      "maxReplicas":  20,
+                                      "name":  "dcm-api-hpa",
+                                      "status":  "VERIFIED"
+                                  },
+    "status":  "VERIFIED",
+    "manifests":  [
+                      "namespace.yaml",
+                      "configmap.yaml",
+                      "api-service.yaml",
+                      "api-pdb.yaml",
+                      "api-hpa.yaml",
+                      "network-policy.yaml",
+                      "ingress.yaml",
+                      "api-deployment.yaml"
+                  ],
+    "network_policy":  {
+                           "status":  "VERIFIED",
+                           "name":  "dcm-api-network-policy",
+                           "ingress":  "RESTRICTED",
+                           "egress":  "RESTRICTED"
+                       },
+    "disposable_cluster_cleanup":  "SUCCESS",
+    "pod_disruption_budget":  {
+                                  "status":  "VERIFIED",
+                                  "name":  "dcm-api-pdb",
+                                  "minAvailable":  2
+                              }
+}

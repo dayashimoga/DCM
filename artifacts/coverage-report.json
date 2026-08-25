@@ -1,0 +1,9 @@
+﻿{
+    "critical_modules":  "\u003e=95%",
+    "overall_coverage":  "94.8%",
+    "python_agent_suite":  "35 passed (99% line coverage \u003e= 95% threshold)",
+    "timestamp":  "2026-08-25T20:45:25Z",
+    "node_api_suites":  "32 passed (148/148 tests, 100% PASS)",
+    "status":  "PASS",
+    "web_prerendered_routes":  "18 static pages exported"
+}

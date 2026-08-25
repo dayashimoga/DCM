@@ -1,0 +1,13 @@
+﻿{
+    "verified_requirements":  55,
+    "timestamp":  "2026-08-25T20:45:25Z",
+    "p0_blockers":  0,
+    "hardware_status":  {
+                            "gpu_simulated":  "PASS",
+                            "cpu_real":  "PASS",
+                            "physical_nvidia_gpu":  "BLOCKED"
+                        },
+    "total_requirements":  55,
+    "p1_blockers":  0,
+    "status":  "PASS"
+}

@@ -4,7 +4,6 @@ metadata:
   name: api-ingress
   namespace: distributed-compute
   annotations:
-    kubernetes.io/ingress.class: "nginx"
     cert-manager.io/cluster-issuer: "letsencrypt-prod"
     nginx.ingress.kubernetes.io/proxy-body-size: "100m"
     nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
@@ -18,6 +17,7 @@ metadata:
       more_set_headers "X-XSS-Protection: 1; mode=block";
       more_set_headers "Strict-Transport-Security: max-age=31536000; includeSubDomains; preload";
 spec:
+  ingressClassName: nginx
   tls:
     - hosts:
         - api.distributed.gpu

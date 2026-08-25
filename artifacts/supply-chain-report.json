@@ -1,0 +1,11 @@
+﻿{
+    "reproducible_oci_builds":  "VERIFIED",
+    "timestamp":  "2026-08-25T20:45:25Z",
+    "pinned_api_deployment_image":  "ghcr.io/distributed-compute/marketplace-api:v1.0.0",
+    "vulnerabilities_in_app_code":  0,
+    "base_images":  [
+                        "docker.io/library/node:20-alpine",
+                        "docker.io/library/python:3.11-slim"
+                    ],
+    "status":  "PASS"
+}

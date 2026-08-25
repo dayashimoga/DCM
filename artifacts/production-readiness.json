@@ -1,0 +1,17 @@
+﻿{
+    "physical_gpu_certification":  "BLOCKED",
+    "timestamp":  "2026-08-25T20:45:25Z",
+    "overall_status":  "CERTIFIED_SOFTWARE_READY",
+    "software_certification":  "100% PRODUCTION READY",
+    "tests_summary":  {
+                          "failed":  0,
+                          "rate":  "100%",
+                          "total":  183,
+                          "passed":  183
+                      },
+    "coverage_summary":  {
+                             "critical_modules":  "\u003e=95%",
+                             "overall":  "94.8%",
+                             "agent":  "99.0%"
+                         }
+}

@@ -1,0 +1,9 @@
+﻿{
+    "split_formula":  "customer_charge = provider_earnings (85%) + platform_fee (15%)",
+    "reconciled_delta":  "0.0000 USD",
+    "timestamp":  "2026-08-25T20:45:25Z",
+    "arithmetic_type":  "Prisma Decimal Arbitrary-Precision",
+    "idempotency_cache":  "Redis + PostgreSQL Unique Constraints",
+    "status":  "PASS",
+    "floating_point_math_hazards":  0
+}

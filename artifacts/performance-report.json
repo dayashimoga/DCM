@@ -1,0 +1,9 @@
+﻿{
+    "p50_latency_ms":  1.4,
+    "throughput_rps":  16500,
+    "timestamp":  "2026-08-25T20:45:25Z",
+    "p99_latency_ms":  4.2,
+    "caching_layer":  "Multi-tier in-memory LRU + Redis 7",
+    "status":  "PASS",
+    "p95_latency_ms":  2.8
+}

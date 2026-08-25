@@ -1,0 +1,19 @@
+﻿{
+    "gpu_simulated_validation":  "PASS",
+    "host_os":  "Microsoft Windows NT 10.0.26200.0",
+    "cpu_real_validation":  "PASS",
+    "detected_gpus":  {
+                          "Name":  "Intel(R) Arc(TM) 130T GPU (8GB)",
+                          "DriverVersion":  "32.0.101.8132",
+                          "AdapterRAM":  2147479552
+                      },
+    "timestamp":  "2026-08-25T20:45:25Z",
+    "blocker_reason":  "No physical NVIDIA GPU device or NVML driver present on host (detected Intel(R) Arc(TM) 130T GPU (8GB)). Hardware-level GPU_PHYSICAL_REAL certification is blocked until executed on a host with physical NVIDIA hardware.",
+    "has_nvidia_hardware":  false,
+    "physical_gpu_certification":  "BLOCKED",
+    "attestation_methods":  [
+                                "NVML",
+                                "CUDA Runtime",
+                                "SHA-256 Proof-of-Work Benchmark Challenge"
+                            ]
+}
