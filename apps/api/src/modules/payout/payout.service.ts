@@ -8,6 +8,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { RequestPayoutDto } from './dto/request-payout.dto';
 import { AddDestinationDto } from './dto/add-destination.dto';
+import { Decimal } from '@prisma/client/runtime/library';
 import {
   ProviderEarningsAnalytics,
   PayoutRequest,
@@ -20,6 +21,10 @@ import {
 export class PayoutService {
   private readonly logger = new Logger(PayoutService.name);
   public static readonly MINIMUM_PAYOUT_THRESHOLD_USD = 50.0;
+
+  // In-memory fallbacks when Redis is offline
+  private readonly memoryPayoutHistory = new Map<string, PayoutRequest[]>();
+  private readonly memoryDestinations = new Map<string, PayoutDestination[]>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -35,16 +40,23 @@ export class PayoutService {
       throw new NotFoundException(`Provider ${providerId} not found`);
     }
 
-    const availableBalance = Number(provider.balanceUsd);
+    const availableBalance = new Decimal(provider.balanceUsd);
 
     // Retrieve active nodes for provider
     let activeGpuCount = 4;
+    let avgHourlyRate = 1.25;
     try {
       const nodes = await this.prisma.computeNode.findMany({
         where: { providerId },
       });
       if (nodes && nodes.length > 0) {
         activeGpuCount = nodes.reduce((sum: number, n: any) => sum + (n.gpuCount || 1), 0);
+        const validRates = nodes
+          .map((n: any) => Number(n.hourlyRateUsd))
+          .filter((r: number) => !isNaN(r) && r > 0);
+        if (validRates.length > 0) {
+          avgHourlyRate = validRates.reduce((sum: number, r: number) => sum + r, 0) / validRates.length;
+        }
       }
     } catch {}
 
@@ -53,7 +65,7 @@ export class PayoutService {
 
     const payoutHistory: PayoutRequest[] = [];
     const destinations: PayoutDestination[] = [];
-    let totalPaidOutUsd = 0;
+    let totalPaidOutUsd = new Decimal('0');
 
     if (redisClient && redisHealthy) {
       // Payout history
@@ -63,7 +75,7 @@ export class PayoutService {
           const req: PayoutRequest = JSON.parse(raw);
           payoutHistory.push(req);
           if (req.status === PayoutStatus.COMPLETED) {
-            totalPaidOutUsd += req.netAmountUsd;
+            totalPaidOutUsd = totalPaidOutUsd.add(new Decimal(req.netAmountUsd));
           }
         } catch {}
       });
@@ -75,6 +87,17 @@ export class PayoutService {
           destinations.push(JSON.parse(raw));
         } catch {}
       });
+    } else {
+      const memHistory = this.memoryPayoutHistory.get(providerId) || [];
+      payoutHistory.push(...memHistory);
+      memHistory.forEach((req) => {
+        if (req.status === PayoutStatus.COMPLETED) {
+          totalPaidOutUsd = totalPaidOutUsd.add(new Decimal(req.netAmountUsd));
+        }
+      });
+
+      const memDests = this.memoryDestinations.get(providerId) || [];
+      destinations.push(...memDests);
     }
 
     // Default sample destination if none exists
@@ -91,24 +114,23 @@ export class PayoutService {
       });
     }
 
-    const netEarnedUsd = parseFloat((availableBalance + totalPaidOutUsd).toFixed(2));
-    const grossRevenueUsd = parseFloat((netEarnedUsd / 0.85).toFixed(2));
-    const platformFeeUsd = parseFloat((grossRevenueUsd - netEarnedUsd).toFixed(2));
+    const netEarnedUsd = availableBalance.add(totalPaidOutUsd);
+    const grossRevenueUsd = netEarnedUsd.div(new Decimal('0.85'));
+    const platformFeeUsd = grossRevenueUsd.sub(netEarnedUsd);
     const averageUtilizationPercent = 78.5;
 
-    // Monthly yield forecast: GPUs * $1.20/hr * 24h * 30d * 0.785 util * 0.85 net
-    const avgHourlyRate = 1.25;
+    // Monthly yield forecast: GPUs * avgHourlyRate * 24h * 30d * 0.785 util * 0.85 net
     const estimatedMonthlyYieldUsd = parseFloat(
       (activeGpuCount * avgHourlyRate * 24 * 30 * (averageUtilizationPercent / 100) * 0.85).toFixed(2),
     );
 
     return {
       providerId,
-      grossRevenueUsd,
-      platformFeeUsd,
-      netEarnedUsd,
-      availablePayoutBalanceUsd: availableBalance,
-      totalPaidOutUsd: parseFloat(totalPaidOutUsd.toFixed(2)),
+      grossRevenueUsd: grossRevenueUsd.toNumber(),
+      platformFeeUsd: platformFeeUsd.toNumber(),
+      netEarnedUsd: netEarnedUsd.toNumber(),
+      availablePayoutBalanceUsd: availableBalance.toNumber(),
+      totalPaidOutUsd: totalPaidOutUsd.toNumber(),
       activeGpuCount,
       averageUtilizationPercent,
       estimatedMonthlyYieldUsd,
@@ -133,6 +155,10 @@ export class PayoutService {
     const redisHealthy = await this.redis.isHealthy();
     if (redisClient && redisHealthy) {
       await redisClient.lpush(`payouts:destinations:${dto.providerId}`, JSON.stringify(dest));
+    } else {
+      const dests = this.memoryDestinations.get(dto.providerId) || [];
+      dests.unshift(dest);
+      this.memoryDestinations.set(dto.providerId, dests);
     }
 
     this.logger.log(`Added payout destination for provider ${dto.providerId}: ${dto.label}`);
@@ -154,28 +180,30 @@ export class PayoutService {
       throw new NotFoundException(`Provider ${dto.providerId} not found`);
     }
 
-    const currentBalance = Number(provider.balanceUsd);
-    if (currentBalance < dto.amountUsd) {
+    const currentBalance = new Decimal(provider.balanceUsd);
+    const requestAmount = new Decimal(dto.amountUsd);
+
+    if (currentBalance.lt(requestAmount)) {
       throw new BadRequestException(
-        `Insufficient available earnings ($${currentBalance.toFixed(2)}) to request payout of $${dto.amountUsd.toFixed(2)}`,
+        `Insufficient available earnings ($${currentBalance.toFixed(2)}) to request payout of $${requestAmount.toFixed(2)}`,
       );
     }
 
     // Debit provider balance
     await this.prisma.user.update({
       where: { id: dto.providerId },
-      data: { balanceUsd: { decrement: dto.amountUsd } },
+      data: { balanceUsd: { decrement: requestAmount.toNumber() } },
     });
 
-    const feeUsd = dto.destinationType === PayoutDestinationType.BANK_STRIPE_CONNECT ? 1.50 : 0.50;
-    const netAmountUsd = parseFloat((dto.amountUsd - feeUsd).toFixed(2));
+    const feeUsd = dto.destinationType === PayoutDestinationType.BANK_STRIPE_CONNECT ? new Decimal('1.50') : new Decimal('0.50');
+    const netAmountUsd = requestAmount.sub(feeUsd);
 
     const payout: PayoutRequest = {
       id: `po-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
       providerId: dto.providerId,
-      amountUsd: dto.amountUsd,
-      feeUsd,
-      netAmountUsd,
+      amountUsd: requestAmount.toNumber(),
+      feeUsd: feeUsd.toNumber(),
+      netAmountUsd: netAmountUsd.toNumber(),
       destinationType: dto.destinationType,
       destinationTarget: dto.destinationTarget || 'Primary Default Destination',
       status: PayoutStatus.COMPLETED,
@@ -190,10 +218,14 @@ export class PayoutService {
     const redisHealthy = await this.redis.isHealthy();
     if (redisClient && redisHealthy) {
       await redisClient.lpush(`payouts:history:${dto.providerId}`, JSON.stringify(payout));
+    } else {
+      const history = this.memoryPayoutHistory.get(dto.providerId) || [];
+      history.unshift(payout);
+      this.memoryPayoutHistory.set(dto.providerId, history);
     }
 
     this.logger.log(
-      `Executed payout for provider ${dto.providerId}: Gross=$${dto.amountUsd}, Net=$${netAmountUsd} to ${dto.destinationType}`,
+      `Executed payout for provider ${dto.providerId}: Gross=$${requestAmount.toNumber()}, Net=$${netAmountUsd.toNumber()} to ${dto.destinationType}`,
     );
     return payout;
   }

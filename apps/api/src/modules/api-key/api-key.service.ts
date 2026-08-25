@@ -26,19 +26,21 @@ export class ApiKeyService {
   }
 
   private seedInitialKeys() {
-    const rawSecret = 'dc_live_7fa930bc12984efc9812401823901238';
-    const hashed = crypto.createHash('sha256').update(rawSecret).digest('hex');
+    if (process.env.NODE_ENV !== 'production') {
+      const rawSecret = 'dc_live_7fa930bc12984efc9812401823901238';
+      const hashed = crypto.createHash('sha256').update(rawSecret).digest('hex');
 
-    this.keys.push({
-      id: 'key-init-01',
-      userId: 'user-cust-default',
-      name: 'Default CI/CD Training Key',
-      keyPrefix: 'dc_live_7fa9...1238',
-      hashedSecret: hashed,
-      scopes: [ApiKeyScope.WORKLOADS_ALL, ApiKeyScope.NODES_READ, ApiKeyScope.BILLING_READ],
-      lastUsedAt: new Date(Date.now() - 3600000).toISOString(),
-      createdAt: new Date(Date.now() - 604800000).toISOString(),
-    });
+      this.keys.push({
+        id: 'key-init-01',
+        userId: 'user-cust-default',
+        name: 'Default CI/CD Training Key',
+        keyPrefix: 'dc_live_7fa9...1238',
+        hashedSecret: hashed,
+        scopes: [ApiKeyScope.WORKLOADS_ALL, ApiKeyScope.NODES_READ, ApiKeyScope.BILLING_READ],
+        lastUsedAt: new Date(Date.now() - 3600000).toISOString(),
+        createdAt: new Date(Date.now() - 604800000).toISOString(),
+      });
+    }
   }
 
   async createApiKey(userId: string, dto: CreateApiKeyDto): Promise<CreateApiKeyResponse> {

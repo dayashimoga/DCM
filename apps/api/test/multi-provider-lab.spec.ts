@@ -238,7 +238,18 @@ describe('Real Multi-Provider Fleet Lab, Invariants & Security Gate Suite', () =
           if (where?.nodeId) return list.filter((j) => j.nodeId === where.nodeId);
           return list;
         }),
-        count: vi.fn().mockResolvedValue(mockDbJobs.size),
+        count: vi.fn().mockImplementation(async ({ where }: any = {}) => {
+          if (where?.nodeId) {
+            let cnt = 0;
+            for (const j of mockDbJobs.values()) {
+              if (j.nodeId === where.nodeId && (!where.status?.in || where.status.in.includes(j.status))) {
+                cnt++;
+              }
+            }
+            return cnt;
+          }
+          return mockDbJobs.size;
+        }),
         update: vi.fn().mockImplementation(async ({ where, data }: any) => {
           const j = mockDbJobs.get(where.id);
           if (j) {

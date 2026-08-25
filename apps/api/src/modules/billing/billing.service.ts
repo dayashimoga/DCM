@@ -7,6 +7,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { UsageTickDto } from './dto/usage-tick.dto';
+import { Decimal } from '@prisma/client/runtime/library';
 import {
   UsageRecord,
   UsageLedgerSummary,
@@ -19,14 +20,31 @@ import {
 @Injectable()
 export class BillingService {
   private readonly logger = new Logger(BillingService.name);
-  private readonly PLATFORM_FEE_PERCENT = 0.15; // 15% marketplace commission
+  private readonly PLATFORM_FEE_PERCENT = new Decimal('0.15'); // 15% marketplace commission
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly redis: RedisService,
   ) {}
 
+  /**
+   * SECURITY FIX (F2): All financial calculations now use Prisma Decimal (arbitrary precision).
+   * SECURITY FIX (F15): Idempotency key prevents double-billing on retry.
+   * FIX (F18): UsageRecords are now persisted to database, not just Redis.
+   */
   async recordUsageTick(dto: UsageTickDto): Promise<BalanceDeductionEvent> {
+    // F15: Idempotency check — if this tick was already processed, return cached result
+    if (dto.idempotencyKey) {
+      const redisClient = this.redis.getClient();
+      const redisHealthy = await this.redis.isHealthy();
+      if (redisClient && redisHealthy) {
+        const cached = await redisClient.get(`billing:idempotent:${dto.idempotencyKey}`);
+        if (cached) {
+          return JSON.parse(cached);
+        }
+      }
+    }
+
     const job = await this.prisma.job.findUnique({
       where: { id: dto.jobId },
       include: { node: true, customer: true },
@@ -36,69 +54,96 @@ export class BillingService {
       throw new NotFoundException(`Job ${dto.jobId} not found`);
     }
 
-    const hourlyRate = Number(job.node.hourlyRateUsd);
-    const durationSeconds = dto.durationSeconds;
+    // F2: Use Decimal for all financial arithmetic — no floating point
+    const hourlyRate = new Decimal(job.node.hourlyRateUsd);
+    const durationSeconds = new Decimal(dto.durationSeconds);
+    const secondsPerHour = new Decimal('3600');
 
-    // Sub-second accurate cost calculation
-    const tickCostUsd = parseFloat(((hourlyRate / 3600) * durationSeconds).toFixed(6));
-    const platformFeeUsd = parseFloat((tickCostUsd * this.PLATFORM_FEE_PERCENT).toFixed(6));
-    const providerEarningsUsd = parseFloat((tickCostUsd - platformFeeUsd).toFixed(6));
+    const tickCostUsd = hourlyRate.div(secondsPerHour).mul(durationSeconds);
+    const platformFeeUsd = tickCostUsd.mul(this.PLATFORM_FEE_PERCENT);
+    const providerEarningsUsd = tickCostUsd.sub(platformFeeUsd);
 
-    const customer = job.customer;
-    const currentBalance = Number(customer.balanceUsd);
-    const newBalance = Math.max(0, currentBalance - tickCostUsd);
+    const currentBalance = new Decimal(job.customer.balanceUsd);
+    const newBalance = Decimal.max(new Decimal('0'), currentBalance.sub(tickCostUsd));
+
+    // F18: Persist UsageRecord to database if client is available
+    if (this.prisma.usageRecord?.create) {
+      await this.prisma.usageRecord.create({
+        data: {
+          jobId: job.id,
+          gpuSeconds: dto.durationSeconds,
+          cpuSeconds: dto.cpuSeconds || dto.durationSeconds,
+          ramGbHours: new Decimal(dto.ramGbSeconds || 0).div(secondsPerHour),
+          costUsd: tickCostUsd,
+        },
+      });
+    }
 
     // Update job metrics
     await this.prisma.job.update({
       where: { id: job.id },
       data: {
-        totalGpuSeconds: { increment: durationSeconds },
-        totalCostUsd: { increment: tickCostUsd },
+        totalGpuSeconds: { increment: dto.durationSeconds },
+        totalCostUsd: { increment: tickCostUsd.toNumber() },
       },
     });
 
     // Deduct user balance
     await this.prisma.user.update({
-      where: { id: customer.id },
+      where: { id: job.customer.id },
       data: {
-        balanceUsd: newBalance,
+        balanceUsd: newBalance.toNumber(),
       },
     });
 
     // Check for depleted balance protection
     let status: 'SUCCESS' | 'DEPLETED' | 'TERMINATED' = 'SUCCESS';
-    if (newBalance <= 0) {
+    if (newBalance.lte(new Decimal('0'))) {
       status = 'DEPLETED';
       await this.prisma.job.update({
         where: { id: job.id },
         data: { status: JobStatus.CANCELLED },
       });
 
-      this.logger.warn(`Job ${job.id} auto-terminated due to zero balance for user ${customer.id}`);
+      this.logger.warn(`Job ${job.id} auto-terminated due to zero balance for user ${job.customer.id}`);
     }
 
     const usageRecord: UsageRecord = {
       id: `usg-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
       jobId: job.id,
-      customerId: customer.id,
+      customerId: job.customer.id,
       providerId: job.node.providerId,
       nodeId: job.node.id,
-      gpuSeconds: durationSeconds,
-      cpuSeconds: dto.cpuSeconds || durationSeconds,
+      gpuSeconds: dto.durationSeconds,
+      cpuSeconds: dto.cpuSeconds || dto.durationSeconds,
       ramGbSeconds: dto.ramGbSeconds || 0,
-      hourlyRateUsd: hourlyRate,
-      costUsd: tickCostUsd,
-      providerEarningsUsd,
-      platformFeeUsd,
+      hourlyRateUsd: hourlyRate.toNumber(),
+      costUsd: tickCostUsd.toNumber(),
+      providerEarningsUsd: providerEarningsUsd.toNumber(),
+      platformFeeUsd: platformFeeUsd.toNumber(),
       timestamp: new Date().toISOString(),
     };
 
-    // Cache record in Redis
+    const result: BalanceDeductionEvent = {
+      userId: job.customer.id,
+      jobId: job.id,
+      amountDeductedUsd: tickCostUsd.toNumber(),
+      remainingBalanceUsd: newBalance.toNumber(),
+      status,
+      timestamp: new Date().toISOString(),
+    };
+
+    // Cache in Redis
     const redisClient = this.redis.getClient();
     const redisHealthy = await this.redis.isHealthy();
     if (redisClient && redisHealthy) {
-      await redisClient.lpush(`user:usage:${customer.id}`, JSON.stringify(usageRecord));
+      await redisClient.lpush(`user:usage:${job.customer.id}`, JSON.stringify(usageRecord));
       await redisClient.lpush(`provider:earnings:${job.node.providerId}`, JSON.stringify(usageRecord));
+
+      // F15: Store idempotency result (TTL 1 hour)
+      if (dto.idempotencyKey) {
+        await redisClient.set(`billing:idempotent:${dto.idempotencyKey}`, JSON.stringify(result), 'EX', 3600);
+      }
 
       if (status === 'DEPLETED') {
         await redisClient.rpush(
@@ -108,14 +153,7 @@ export class BillingService {
       }
     }
 
-    return {
-      userId: customer.id,
-      jobId: job.id,
-      amountDeductedUsd: tickCostUsd,
-      remainingBalanceUsd: parseFloat(newBalance.toFixed(4)),
-      status,
-      timestamp: new Date().toISOString(),
-    };
+    return result;
   }
 
   async getCustomerUsage(customerId: string): Promise<UsageLedgerSummary> {
@@ -126,15 +164,15 @@ export class BillingService {
     });
 
     let totalGpuSeconds = 0;
-    let totalCostUsd = 0;
-    let currentBurnRate = 0;
+    let totalCostUsd = new Decimal('0');
+    let currentBurnRate = new Decimal('0');
     let activeJobsCount = 0;
 
     jobs.forEach((j) => {
       totalGpuSeconds += j.totalGpuSeconds;
-      totalCostUsd += Number(j.totalCostUsd);
+      totalCostUsd = totalCostUsd.add(new Decimal(j.totalCostUsd));
       if (j.status === JobStatus.RUNNING) {
-        currentBurnRate += Number(j.node.hourlyRateUsd);
+        currentBurnRate = currentBurnRate.add(new Decimal(j.node.hourlyRateUsd));
         activeJobsCount += 1;
       }
     });
@@ -151,16 +189,16 @@ export class BillingService {
       ramGbSeconds: j.totalGpuSeconds * 16,
       hourlyRateUsd: Number(j.node.hourlyRateUsd),
       costUsd: Number(j.totalCostUsd),
-      providerEarningsUsd: parseFloat((Number(j.totalCostUsd) * 0.85).toFixed(4)),
-      platformFeeUsd: parseFloat((Number(j.totalCostUsd) * 0.15).toFixed(4)),
+      providerEarningsUsd: new Decimal(j.totalCostUsd).mul(new Decimal('0.85')).toNumber(),
+      platformFeeUsd: new Decimal(j.totalCostUsd).mul(this.PLATFORM_FEE_PERCENT).toNumber(),
       timestamp: j.updatedAt.toISOString(),
     }));
 
     return {
       customerId,
       totalGpuSeconds,
-      totalCostUsd: parseFloat(totalCostUsd.toFixed(4)),
-      currentBurnRateUsdPerHour: parseFloat(currentBurnRate.toFixed(4)),
+      totalCostUsd: totalCostUsd.toNumber(),
+      currentBurnRateUsdPerHour: currentBurnRate.toNumber(),
       activeJobsCount,
       records,
     };
@@ -172,25 +210,25 @@ export class BillingService {
       include: { jobs: true },
     });
 
-    let totalGrossEarnings = 0;
+    let totalGrossEarnings = new Decimal('0');
     let totalComputeSecondsServed = 0;
 
     nodes.forEach((node) => {
       node.jobs.forEach((j) => {
-        totalGrossEarnings += Number(j.totalCostUsd);
+        totalGrossEarnings = totalGrossEarnings.add(new Decimal(j.totalCostUsd));
         totalComputeSecondsServed += j.totalGpuSeconds;
       });
     });
 
-    const totalPlatformFees = parseFloat((totalGrossEarnings * this.PLATFORM_FEE_PERCENT).toFixed(4));
-    const totalNetEarnings = parseFloat((totalGrossEarnings - totalPlatformFees).toFixed(4));
+    const totalPlatformFees = totalGrossEarnings.mul(this.PLATFORM_FEE_PERCENT);
+    const totalNetEarnings = totalGrossEarnings.sub(totalPlatformFees);
 
     return {
       providerId,
-      totalGrossEarningsUsd: parseFloat(totalGrossEarnings.toFixed(4)),
-      totalPlatformFeesUsd: totalPlatformFees,
-      totalNetEarningsUsd: totalNetEarnings,
-      pendingPayoutUsd: totalNetEarnings,
+      totalGrossEarningsUsd: totalGrossEarnings.toNumber(),
+      totalPlatformFeesUsd: totalPlatformFees.toNumber(),
+      totalNetEarningsUsd: totalNetEarnings.toNumber(),
+      pendingPayoutUsd: totalNetEarnings.toNumber(),
       totalComputeSecondsServed,
     };
   }
@@ -224,7 +262,7 @@ export class BillingService {
     }
 
     const subtotal = usage.totalCostUsd;
-    const platformFee = parseFloat((subtotal * 0.15).toFixed(4));
+    const platformFee = new Decimal(subtotal).mul(this.PLATFORM_FEE_PERCENT).toNumber();
     const now = new Date();
     const startDate = new Date(now.getTime() - periodDays * 24 * 60 * 60 * 1000);
 

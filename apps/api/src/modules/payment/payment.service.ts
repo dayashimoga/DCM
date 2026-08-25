@@ -9,6 +9,7 @@ import { RedisService } from '../redis/redis.service';
 import { DepositDto } from './dto/deposit.dto';
 import { LockEscrowDto } from './dto/lock-escrow.dto';
 import { SettleEscrowDto } from './dto/settle-escrow.dto';
+import { Decimal } from '@prisma/client/runtime/library';
 import {
   WalletSummary,
   WalletTransaction,
@@ -23,35 +24,43 @@ import {
 export class PaymentService {
   private readonly logger = new Logger(PaymentService.name);
 
+  // In-memory fallbacks when Redis is offline
+  private readonly memoryEscrowStore = new Map<string, EscrowHold>();
+  private readonly memoryTxStore = new Map<string, WalletTransaction[]>();
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly redis: RedisService,
   ) {}
 
+  /**
+   * [SIMULATED / TESTNET] Generates deterministic testnet deposit addresses for testing.
+   * NOTE: In a real production deployment, this would interface with an MPC wallet or Web3 RPC.
+   */
   private generateDeterministicAddresses(userId: string): CryptoDepositAddress[] {
     const hash = userId.split('-')[0] || '123';
     return [
       {
         symbol: 'USDC',
-        network: 'Solana (SPL)',
+        network: 'Solana (SPL) [Testnet/Simulated]',
         address: `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyT${hash}`,
         minDepositUsd: 5.0,
       },
       {
         symbol: 'USDT',
-        network: 'Ethereum (ERC-20)',
+        network: 'Ethereum (ERC-20) [Testnet/Simulated]',
         address: `0xdAC17F958D2ee523a2206206994597C13D831ec7${hash}`,
         minDepositUsd: 10.0,
       },
       {
         symbol: 'SOL',
-        network: 'Solana Mainnet',
+        network: 'Solana Devnet [Simulated]',
         address: `So11111111111111111111111111111111111111112${hash}`,
         minDepositUsd: 5.0,
       },
       {
         symbol: 'ETH',
-        network: 'Ethereum Mainnet',
+        network: 'Sepolia Testnet [Simulated]',
         address: `0x742d35Cc6634C0532925a3b844Bc454e4438f44e${hash}`,
         minDepositUsd: 20.0,
       },
@@ -72,7 +81,7 @@ export class PaymentService {
 
     const recentTransactions: WalletTransaction[] = [];
     const activeEscrows: EscrowHold[] = [];
-    let lockedInEscrowUsd = 0;
+    let lockedInEscrowUsd = new Decimal('0');
 
     if (redisClient && redisHealthy) {
       const rawTxs = await redisClient.lrange(`wallet:txs:${userId}`, 0, 20);
@@ -90,18 +99,30 @@ export class PaymentService {
             const hold: EscrowHold = JSON.parse(raw);
             if (hold.status === EscrowStatus.HELD) {
               activeEscrows.push(hold);
-              lockedInEscrowUsd += hold.amountLockedUsd;
+              lockedInEscrowUsd = lockedInEscrowUsd.add(new Decimal(hold.amountLockedUsd));
             }
           } catch {}
         }
       }
+    } else {
+      const memTxs = this.memoryTxStore.get(userId) || [];
+      recentTransactions.push(...memTxs.slice(0, 20));
+
+      for (const [key, hold] of this.memoryEscrowStore.entries()) {
+        if (hold.customerId === userId && hold.status === EscrowStatus.HELD) {
+          activeEscrows.push(hold);
+          lockedInEscrowUsd = lockedInEscrowUsd.add(new Decimal(hold.amountLockedUsd));
+        }
+      }
     }
+
+    const availableBal = new Decimal(user.balanceUsd);
 
     return {
       userId,
-      availableBalanceUsd: Number(user.balanceUsd),
-      lockedInEscrowUsd: parseFloat(lockedInEscrowUsd.toFixed(4)),
-      totalDepositedUsd: parseFloat((Number(user.balanceUsd) + lockedInEscrowUsd).toFixed(2)),
+      availableBalanceUsd: availableBal.toNumber(),
+      lockedInEscrowUsd: lockedInEscrowUsd.toNumber(),
+      totalDepositedUsd: availableBal.add(lockedInEscrowUsd).toNumber(),
       cryptoAddresses: this.generateDeterministicAddresses(userId),
       recentTransactions,
       activeEscrows,
@@ -139,6 +160,10 @@ export class PaymentService {
     const redisHealthy = await this.redis.isHealthy();
     if (redisClient && redisHealthy) {
       await redisClient.lpush(`wallet:txs:${dto.userId}`, JSON.stringify(tx));
+    } else {
+      const userTxs = this.memoryTxStore.get(dto.userId) || [];
+      userTxs.unshift(tx);
+      this.memoryTxStore.set(dto.userId, userTxs);
     }
 
     this.logger.log(`Processed deposit of $${dto.amountUsd} for user ${dto.userId}`);
@@ -154,16 +179,19 @@ export class PaymentService {
       throw new NotFoundException(`Customer ${dto.customerId} not found`);
     }
 
-    if (Number(user.balanceUsd) < dto.estimatedBudgetUsd) {
+    const availableBal = new Decimal(user.balanceUsd);
+    const lockBudget = new Decimal(dto.estimatedBudgetUsd);
+
+    if (availableBal.lt(lockBudget)) {
       throw new BadRequestException(
-        `Insufficient available balance ($${Number(user.balanceUsd).toFixed(2)}) to lock escrow budget ($${dto.estimatedBudgetUsd.toFixed(2)})`,
+        `Insufficient available balance ($${availableBal.toFixed(2)}) to lock escrow budget ($${lockBudget.toFixed(2)})`,
       );
     }
 
     // Deduct available balance
     await this.prisma.user.update({
       where: { id: dto.customerId },
-      data: { balanceUsd: { decrement: dto.estimatedBudgetUsd } },
+      data: { balanceUsd: { decrement: lockBudget.toNumber() } },
     });
 
     const escrow: EscrowHold = {
@@ -196,6 +224,11 @@ export class PaymentService {
       await redisClient.set(`escrow:job:${dto.jobId}`, JSON.stringify(escrow));
       await redisClient.set(`escrow:user:${dto.customerId}:${dto.jobId}`, JSON.stringify(escrow));
       await redisClient.lpush(`wallet:txs:${dto.customerId}`, JSON.stringify(lockTx));
+    } else {
+      this.memoryEscrowStore.set(`escrow:job:${dto.jobId}`, escrow);
+      const userTxs = this.memoryTxStore.get(dto.customerId) || [];
+      userTxs.unshift(lockTx);
+      this.memoryTxStore.set(dto.customerId, userTxs);
     }
 
     this.logger.log(`Locked $${dto.estimatedBudgetUsd} in escrow for job ${dto.jobId}`);
@@ -214,38 +247,50 @@ export class PaymentService {
           escrow = JSON.parse(raw);
         } catch {}
       }
+    } else {
+      escrow = this.memoryEscrowStore.get(`escrow:job:${dto.jobId}`) || null;
     }
 
     if (!escrow) {
-      // Create fallback escrow record
-      escrow = {
-        id: `escrow-${dto.jobId}`,
-        jobId: dto.jobId,
-        customerId: 'demo-customer',
-        providerId: 'demo-provider',
-        amountLockedUsd: dto.actualCostUsd,
-        amountSettledUsd: 0,
-        amountRefundedUsd: 0,
-        status: EscrowStatus.HELD,
-        createdAt: new Date().toISOString(),
-      };
+      // Look up job in DB for authentic customer and provider reference
+      const job = await this.prisma.job.findUnique({
+        where: { id: dto.jobId },
+        include: { node: true },
+      });
+
+      if (job) {
+        escrow = {
+          id: `escrow-${dto.jobId}`,
+          jobId: dto.jobId,
+          customerId: job.customerId,
+          providerId: job.node.providerId,
+          amountLockedUsd: dto.actualCostUsd,
+          amountSettledUsd: 0,
+          amountRefundedUsd: 0,
+          status: EscrowStatus.HELD,
+          createdAt: new Date().toISOString(),
+        };
+      } else {
+        throw new NotFoundException(`Escrow record or job not found for ${dto.jobId}`);
+      }
     }
 
-    const actualCost = dto.actualCostUsd;
-    const amountRefunded = Math.max(0, parseFloat((escrow.amountLockedUsd - actualCost).toFixed(4)));
+    const lockedAmount = new Decimal(escrow.amountLockedUsd);
+    const actualCost = new Decimal(dto.actualCostUsd);
+    const amountRefunded = Decimal.max(new Decimal('0'), lockedAmount.sub(actualCost));
 
     // Refund unused escrow buffer back to customer wallet
-    if (amountRefunded > 0) {
+    if (amountRefunded.gt(new Decimal('0'))) {
       await this.prisma.user.update({
         where: { id: escrow.customerId },
-        data: { balanceUsd: { increment: amountRefunded } },
+        data: { balanceUsd: { increment: amountRefunded.toNumber() } },
       });
 
       const refundTx: WalletTransaction = {
         id: `tx-ref-${dto.jobId}`,
         userId: escrow.customerId,
         type: TransactionType.ESCROW_REFUND,
-        amountUsd: amountRefunded,
+        amountUsd: amountRefunded.toNumber(),
         currency: 'USD',
         referenceId: dto.jobId,
         description: `Unused Escrow Refund for Job ${dto.jobId.substring(0, 8)}`,
@@ -255,18 +300,22 @@ export class PaymentService {
 
       if (redisClient && redisHealthy) {
         await redisClient.lpush(`wallet:txs:${escrow.customerId}`, JSON.stringify(refundTx));
+      } else {
+        const userTxs = this.memoryTxStore.get(escrow.customerId) || [];
+        userTxs.unshift(refundTx);
+        this.memoryTxStore.set(escrow.customerId, userTxs);
       }
     }
 
     // Settle provider earnings (85%)
-    const providerEarnings = parseFloat((actualCost * 0.85).toFixed(4));
+    const providerEarnings = actualCost.mul(new Decimal('0.85'));
     await this.prisma.user.update({
       where: { id: escrow.providerId },
-      data: { balanceUsd: { increment: providerEarnings } },
+      data: { balanceUsd: { increment: providerEarnings.toNumber() } },
     }).catch(() => {});
 
-    escrow.amountSettledUsd = actualCost;
-    escrow.amountRefundedUsd = amountRefunded;
+    escrow.amountSettledUsd = actualCost.toNumber();
+    escrow.amountRefundedUsd = amountRefunded.toNumber();
     escrow.status = EscrowStatus.SETTLED;
     escrow.settledAt = new Date().toISOString();
 
@@ -274,7 +323,7 @@ export class PaymentService {
       id: `tx-set-${dto.jobId}`,
       userId: escrow.customerId,
       type: TransactionType.ESCROW_SETTLE,
-      amountUsd: actualCost,
+      amountUsd: actualCost.toNumber(),
       currency: 'USD',
       referenceId: dto.jobId,
       description: `Escrow Settlement for Job ${dto.jobId.substring(0, 8)}`,
@@ -286,9 +335,14 @@ export class PaymentService {
       await redisClient.set(`escrow:job:${dto.jobId}`, JSON.stringify(escrow));
       await redisClient.set(`escrow:user:${escrow.customerId}:${dto.jobId}`, JSON.stringify(escrow));
       await redisClient.lpush(`wallet:txs:${escrow.customerId}`, JSON.stringify(settleTx));
+    } else {
+      this.memoryEscrowStore.set(`escrow:job:${dto.jobId}`, escrow);
+      const userTxs = this.memoryTxStore.get(escrow.customerId) || [];
+      userTxs.unshift(settleTx);
+      this.memoryTxStore.set(escrow.customerId, userTxs);
     }
 
-    this.logger.log(`Settled escrow for job ${dto.jobId}: Cost=$${actualCost}, Refund=$${amountRefunded}`);
+    this.logger.log(`Settled escrow for job ${dto.jobId}: Cost=$${actualCost.toNumber()}, Refund=$${amountRefunded.toNumber()}`);
     return escrow;
   }
 
@@ -304,6 +358,8 @@ export class PaymentService {
           escrow = JSON.parse(raw);
         } catch {}
       }
+    } else {
+      escrow = this.memoryEscrowStore.get(`escrow:job:${jobId}`) || null;
     }
 
     if (!escrow) {
@@ -311,13 +367,13 @@ export class PaymentService {
     }
 
     // 100% refund of locked funds
-    const refundAmount = escrow.amountLockedUsd;
+    const refundAmount = new Decimal(escrow.amountLockedUsd);
     await this.prisma.user.update({
       where: { id: escrow.customerId },
-      data: { balanceUsd: { increment: refundAmount } },
+      data: { balanceUsd: { increment: refundAmount.toNumber() } },
     });
 
-    escrow.amountRefundedUsd = refundAmount;
+    escrow.amountRefundedUsd = refundAmount.toNumber();
     escrow.amountSettledUsd = 0;
     escrow.status = EscrowStatus.REFUNDED;
     escrow.settledAt = new Date().toISOString();
@@ -326,7 +382,7 @@ export class PaymentService {
       id: `tx-cancel-${jobId}`,
       userId: escrow.customerId,
       type: TransactionType.ESCROW_REFUND,
-      amountUsd: refundAmount,
+      amountUsd: refundAmount.toNumber(),
       currency: 'USD',
       referenceId: jobId,
       description: `Full Escrow Refund (${reason})`,
@@ -338,9 +394,14 @@ export class PaymentService {
       await redisClient.set(`escrow:job:${jobId}`, JSON.stringify(escrow));
       await redisClient.set(`escrow:user:${escrow.customerId}:${jobId}`, JSON.stringify(escrow));
       await redisClient.lpush(`wallet:txs:${escrow.customerId}`, JSON.stringify(refundTx));
+    } else {
+      this.memoryEscrowStore.set(`escrow:job:${jobId}`, escrow);
+      const userTxs = this.memoryTxStore.get(escrow.customerId) || [];
+      userTxs.unshift(refundTx);
+      this.memoryTxStore.set(escrow.customerId, userTxs);
     }
 
-    this.logger.log(`Fully refunded escrow for job ${jobId} ($${refundAmount})`);
+    this.logger.log(`Fully refunded escrow for job ${jobId} ($${refundAmount.toNumber()})`);
     return escrow;
   }
 }

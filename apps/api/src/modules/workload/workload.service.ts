@@ -9,7 +9,22 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { CreateJobDto } from './dto/create-job.dto';
 import { AgentJobStatusUpdateDto } from './dto/agent-status-update.dto';
+import { Decimal } from '@prisma/client/runtime/library';
 import { Job, JobStatus, NodeStatus } from '@distributed-compute/shared-types';
+
+/**
+ * F16: Explicit job state machine — only defined transitions are allowed.
+ * Any transition not in this map is rejected with BadRequestException.
+ */
+const VALID_JOB_TRANSITIONS: Record<string, string[]> = {
+  [JobStatus.PENDING]:      [JobStatus.SCHEDULED, JobStatus.CANCELLED, JobStatus.FAILED],
+  [JobStatus.SCHEDULED]:    [JobStatus.PROVISIONING, JobStatus.RUNNING, JobStatus.CANCELLED, JobStatus.FAILED],
+  [JobStatus.PROVISIONING]: [JobStatus.RUNNING, JobStatus.FAILED, JobStatus.CANCELLED],
+  [JobStatus.RUNNING]:      [JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED],
+  [JobStatus.COMPLETED]:    [], // Terminal state
+  [JobStatus.FAILED]:       [], // Terminal state
+  [JobStatus.CANCELLED]:    [], // Terminal state
+};
 
 @Injectable()
 export class WorkloadService {
@@ -231,6 +246,16 @@ export class WorkloadService {
       throw new NotFoundException(`Job ${dto.jobId} not found`);
     }
 
+    // F16: Enforce job state machine — reject invalid transitions
+    const currentStatus = job.status as string;
+    const targetStatus = dto.status as string;
+    const allowed = VALID_JOB_TRANSITIONS[currentStatus] || [];
+    if (!allowed.includes(targetStatus)) {
+      throw new BadRequestException(
+        `Invalid job state transition: ${currentStatus} → ${targetStatus}. Allowed: [${allowed.join(', ')}]`,
+      );
+    }
+
     const redisClient = this.redis.getClient();
     const redisHealthy = await this.redis.isHealthy();
 
@@ -256,9 +281,10 @@ export class WorkloadService {
       const durationSeconds = Math.max(1, Math.floor((completedAt.getTime() - startedAt.getTime()) / 1000));
       updateData.totalGpuSeconds = durationSeconds * (job.node.gpuCount || 1);
 
-      const hourlyRate = Number(job.node.hourlyRateUsd);
-      const totalCost = (hourlyRate / 3600) * durationSeconds;
-      updateData.totalCostUsd = parseFloat(totalCost.toFixed(4));
+      // F2: Use Decimal for cost calculation
+      const hourlyRate = new Decimal(job.node.hourlyRateUsd);
+      const totalCost = hourlyRate.div(new Decimal('3600')).mul(new Decimal(durationSeconds));
+      updateData.totalCostUsd = totalCost;
 
       if (redisClient && redisHealthy) {
         await redisClient.del(`node:pending_job:${dto.nodeId}`);

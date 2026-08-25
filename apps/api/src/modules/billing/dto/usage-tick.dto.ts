@@ -30,4 +30,9 @@ export class UsageTickDto {
   @IsNumber()
   @IsOptional()
   ramGbSeconds?: number;
+
+  @ApiPropertyOptional({ description: 'Idempotency key to prevent double billing' })
+  @IsString()
+  @IsOptional()
+  idempotencyKey?: string;
 }

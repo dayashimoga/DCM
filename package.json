@@ -28,5 +28,12 @@
     "hpc"
   ],
   "author": "Distributed Compute Network",
-  "license": "Apache-2.0"
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@nestjs/throttler": "^6.5.0",
+    "helmet": "^8.3.0"
+  },
+  "devDependencies": {
+    "@types/helmet": "^0.0.48"
+  }
 }

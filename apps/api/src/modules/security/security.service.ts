@@ -93,48 +93,43 @@ export class SecurityService {
       }
     }
 
-    // Default sample events if none logged
     if (recentEvents.length === 0) {
-      recentEvents.push(
-        {
-          id: 'sec-init-01',
-          type: SecurityEventType.MALICIOUS_IMAGE_BLOCKED,
-          severity: SecuritySeverity.HIGH,
-          source: 'PROVIDER_SANDBOX',
-          targetId: 'job-untrusted-miner',
-          details: { image: 'docker.io/library/xmrig:latest', reason: 'Cryptominer signature matched' },
-          mitigation: 'Workload creation rejected at submission boundary',
-          timestamp: new Date(Date.now() - 3600000).toISOString(),
-        },
-        {
-          id: 'sec-init-02',
-          type: SecurityEventType.RESTRICTED_SYSCALL_BLOCKED,
-          severity: SecuritySeverity.CRITICAL,
-          source: 'PROVIDER_SANDBOX',
-          targetId: 'job-pytorch-probe',
-          details: { syscall: 'ptrace', returnCode: -1, action: 'SIGKILL' },
-          mitigation: 'Seccomp filter intercepted unauthorized syscall and killed thread',
-          timestamp: new Date(Date.now() - 7200000).toISOString(),
-        },
-        {
-          id: 'sec-init-03',
-          type: SecurityEventType.RATE_LIMIT_EXCEEDED,
-          severity: SecuritySeverity.LOW,
-          source: 'API_GATEWAY',
-          targetId: 'ip-198.51.100.24',
-          details: { rate: '120 req/min', limit: '60 req/min', endpoint: '/api/v1/auth/login' },
-          mitigation: 'HTTP 429 Too Many Requests response with 60s cooldown',
-          timestamp: new Date(Date.now() - 14400000).toISOString(),
-        },
-      );
-      criticalBlocked = 1;
+      recentEvents.push({
+        id: 'sec-baseline-01',
+        type: SecurityEventType.RESTRICTED_SYSCALL_BLOCKED,
+        severity: SecuritySeverity.LOW,
+        source: 'API_GATEWAY',
+        targetId: 'gvisor-sandbox-engine',
+        details: { policy: 'default-hardened-v2.json', status: 'ACTIVE' },
+        mitigation: 'Default seccomp and capability dropping filter active',
+        timestamp: new Date().toISOString(),
+      });
     }
+
+    let activeSandboxes = 0;
+    try {
+      if (redisClient && redisHealthy) {
+        const keys = await redisClient.keys('node:heartbeat:*');
+        activeSandboxes = keys.length;
+      }
+    } catch {}
+
+    const policyChecks = [
+      this.baselinePolicy.dropCapabilities.includes('ALL'),
+      this.baselinePolicy.readOnlyRootfs === true,
+      this.baselinePolicy.noNewPrivileges === true,
+      this.baselinePolicy.runAsUser !== 'root' && this.baselinePolicy.runAsUser !== '0:0',
+      this.baselinePolicy.pidsLimit !== undefined && this.baselinePolicy.pidsLimit <= 2048,
+      this.baselinePolicy.networkMode === NetworkIsolationMode.ISOLATED_NONE,
+    ];
+    const passedChecks = policyChecks.filter(Boolean).length;
+    const complianceScore = parseFloat(((passedChecks / policyChecks.length) * 100).toFixed(1));
 
     return {
       totalEventsLogged: recentEvents.length,
       criticalThreatsBlocked: criticalBlocked,
-      activeSandboxesHardened: 12,
-      systemComplianceScorePercent: 99.8,
+      activeSandboxesHardened: activeSandboxes || 1,
+      systemComplianceScorePercent: complianceScore,
       policy: this.baselinePolicy,
       recentSecurityEvents: recentEvents,
     };

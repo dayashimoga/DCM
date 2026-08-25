@@ -1,0 +1,11 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: api-control-plane-pdb
+  namespace: distributed-compute
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: api-control-plane
+      app.kubernetes.io/component: backend
