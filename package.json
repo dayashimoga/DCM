@@ -16,7 +16,8 @@
     "build": "npm run build --workspaces --if-present",
     "validate": "powershell -ExecutionPolicy Bypass -File ./scripts/podman-validate.ps1",
     "validate:production": "powershell -ExecutionPolicy Bypass -File ./scripts/validate-production.ps1",
-    "certify": "powershell -ExecutionPolicy Bypass -File ./scripts/validate-production.ps1"
+    "certify": "powershell -ExecutionPolicy Bypass -File ./scripts/validate-production.ps1",
+    "production-certify": "powershell -ExecutionPolicy Bypass -File ./scripts/validate-production.ps1"
   },
   "keywords": [
     "gpu",
