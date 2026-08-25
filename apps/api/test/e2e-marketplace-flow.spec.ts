@@ -202,12 +202,19 @@ describe('Master End-to-End Marketplace Lifecycle Integration Test', () => {
           nodeId: 'node-e2e-h100',
           status: 'RUNNING',
           image: 'pytorch/pytorch:2.1.0-cuda12.1-cudnn8-runtime',
+          startedAt: new Date(Date.now() - 3600000),
+          completedAt: null,
           totalGpuSeconds: 3600,
           totalCostUsd: 2.85,
           createdAt: new Date(),
           updatedAt: new Date(),
           node: {
             id: 'node-e2e-h100',
+            providerId: 'prov-e2e-1',
+            name: 'H100-SXM5-Node',
+            gpuCount: 8,
+            gpuModel: 'NVIDIA H100 SXM5',
+            vramGb: 80,
             hourlyRateUsd: 2.85,
           },
           customer: {
@@ -215,7 +222,9 @@ describe('Master End-to-End Marketplace Lifecycle Integration Test', () => {
             balanceUsd: 100.0,
           },
         }),
+        findFirst: vi.fn().mockResolvedValue(null),
         findMany: vi.fn().mockResolvedValue([]),
+        count: vi.fn().mockResolvedValue(0),
         update: vi.fn().mockResolvedValue({
           id: 'job-e2e-llama3',
           status: 'COMPLETED',
@@ -246,7 +255,7 @@ describe('Master End-to-End Marketplace Lifecycle Integration Test', () => {
 
     mockRedis = {
       getClient: vi.fn().mockReturnValue({
-        set: vi.fn(async (key: string, val: string) => {
+        set: vi.fn(async (key: string, val: string, ..._args: any[]) => {
           redisKv.set(key, val);
           return 'OK';
         }),
@@ -257,7 +266,7 @@ describe('Master End-to-End Marketplace Lifecycle Integration Test', () => {
           redisKv.delete(key);
           return 1;
         }),
-        lrange: vi.fn(async (key: string) => {
+        lrange: vi.fn(async (key: string, _start?: number, _end?: number) => {
           return redisLists.get(key) || [];
         }),
         rpush: vi.fn(async (key: string, val: string) => {

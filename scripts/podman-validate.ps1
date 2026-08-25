@@ -70,8 +70,8 @@ $requiredDocs = @(
 
 $missingDocs = 0
 foreach ($doc in $requiredDocs) {
-    if (-not (Test-Path "docs/$doc") -and -not (Test-Path $doc)) {
-        Write-Host "  ❌ Missing required doc: $doc" -ForegroundColor Red
+    if (-not (Test-Path "docs/$doc")) {
+        Write-Host "  ❌ Missing required doc: docs/$doc" -ForegroundColor Red
         $missingDocs++
     }
 }
