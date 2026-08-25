@@ -89,7 +89,7 @@ if ($hasFailed) {
     Write-Host "================================================================" -ForegroundColor Cyan
     exit 1
 } else {
-    Write-Host "  🎉 SPRINT 0 VALIDATION COMPLETED SUCCESSFULLY (100% PASS)     " -ForegroundColor Green
+    Write-Host "  🎉 FULL MASTER VALIDATION COMPLETED SUCCESSFULLY (100% PASS)    " -ForegroundColor Green
     Write-Host "================================================================" -ForegroundColor Cyan
     exit 0
 }
