@@ -1,0 +1,122 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  CUSTOMER
+  PROVIDER
+  ADMIN
+  AGENT
+}
+
+enum NodeStatus {
+  ONLINE
+  BUSY
+  DRAINING
+  OFFLINE
+  MAINTENANCE
+}
+
+enum JobStatus {
+  PENDING
+  SCHEDULED
+  PROVISIONING
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+model User {
+  id           String     @id @default(uuid())
+  email        String     @unique
+  passwordHash String
+  role         Role       @default(CUSTOMER)
+  balanceUsd   Decimal    @default(0.00) @db.Decimal(12, 4)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  providers    Provider[]
+  jobs         Job[]
+  invoices     Invoice[]
+}
+
+model Provider {
+  id            String        @id @default(uuid())
+  userId        String
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name          String
+  payoutAddress String?
+  reputation    Float         @default(100.0)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  nodes         ComputeNode[]
+}
+
+model ComputeNode {
+  id             String       @id @default(uuid())
+  providerId     String
+  provider       Provider     @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  name           String
+  status         NodeStatus   @default(ONLINE)
+  cpuModel       String
+  cpuCores       Int
+  gpuModel       String?
+  gpuCount       Int          @default(0)
+  vramGb         Int          @default(0)
+  ramGb          Int
+  diskGb         Int
+  hourlyRateUsd  Decimal      @db.Decimal(8, 4)
+  benchmarkScore Int          @default(0)
+  lastHeartbeat  DateTime     @default(now())
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  jobs           Job[]
+}
+
+model Job {
+  id              String       @id @default(uuid())
+  customerId      String
+  customer        User         @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  nodeId          String
+  node            ComputeNode  @relation(fields: [nodeId], references: [id], onDelete: Restrict)
+  status          JobStatus    @default(PENDING)
+  image           String
+  command         String?
+  startedAt       DateTime?
+  completedAt     DateTime?
+  totalGpuSeconds Int          @default(0)
+  totalCostUsd    Decimal      @default(0.00) @db.Decimal(10, 4)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  usageRecords    UsageRecord[]
+}
+
+model UsageRecord {
+  id         String   @id @default(uuid())
+  jobId      String
+  job        Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  gpuSeconds Int
+  cpuSeconds Int
+  ramGbHours Decimal  @db.Decimal(8, 4)
+  costUsd    Decimal  @db.Decimal(8, 4)
+  recordedAt DateTime @default(now())
+}
+
+model Invoice {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amountUsd  Decimal  @db.Decimal(10, 4)
+  status     String   @default("PAID")
+  lineItems  Json
+  createdAt  DateTime @default(now())
+}

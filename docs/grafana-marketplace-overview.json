@@ -1,0 +1,87 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "liveNow": true,
+  "panels": [
+    {
+      "title": "Active Compute Nodes",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "compute_marketplace_nodes_online_gauge",
+          "legendFormat": "Nodes Online"
+        }
+      ]
+    },
+    {
+      "title": "Available GPUs",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "targets": [
+        {
+          "expr": "compute_marketplace_gpus_available_gauge",
+          "legendFormat": "GPUs"
+        }
+      ]
+    },
+    {
+      "title": "Active Workloads",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "compute_marketplace_active_jobs_gauge",
+          "legendFormat": "Running Jobs"
+        }
+      ]
+    },
+    {
+      "title": "Escrow Locked (USD)",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "targets": [
+        {
+          "expr": "compute_marketplace_escrow_locked_usd_gauge",
+          "legendFormat": "USD Locked"
+        }
+      ]
+    },
+    {
+      "title": "API Request Rate (req/s)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "targets": [
+        {
+          "expr": "rate(compute_marketplace_http_requests_total[1m])",
+          "legendFormat": "HTTP req/s"
+        }
+      ]
+    },
+    {
+      "title": "P99 Response Latency (ms)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "targets": [
+        {
+          "expr": "compute_marketplace_p99_latency_seconds * 1000",
+          "legendFormat": "P99 Latency (ms)"
+        }
+      ]
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 38,
+  "style": "dark",
+  "tags": ["distributed-compute", "marketplace", "gpu", "kubernetes"],
+  "time": { "from": "now-1h", "to": "now" },
+  "timepicker": { "refresh_intervals": ["5s", "10s", "30s", "1m"] },
+  "timezone": "browser",
+  "title": "Distributed Compute Marketplace — Global Health & RED Telemetry",
+  "uid": "dist-compute-overview",
+  "version": 1
+}

@@ -1,0 +1,12 @@
+{
+  "name": "distributed-compute-load-tests",
+  "version": "0.1.0",
+  "description": "High-throughput performance & scale testing harness",
+  "main": "run-all-load-tests.js",
+  "scripts": {
+    "test:load": "node run-all-load-tests.js"
+  },
+  "dependencies": {
+    "autocannon": "^7.15.0"
+  }
+}

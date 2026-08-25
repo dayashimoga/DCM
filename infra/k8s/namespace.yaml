@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: distributed-compute
+  labels:
+    app.kubernetes.io/name: distributed-compute
+    app.kubernetes.io/part-of: distributed-compute-marketplace
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted

@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: api-config
+  namespace: distributed-compute
+data:
+  NODE_ENV: "production"
+  PORT: "4000"
+  REDIS_PORT: "6379"
+  JWT_EXPIRES_IN: "3600s"
+  REFRESH_TOKEN_EXPIRES_IN: "604800s"
+  MOCK_BENCHMARK: "false"
+  LOG_LEVEL: "info"

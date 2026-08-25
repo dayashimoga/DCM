@@ -1,0 +1,18 @@
+{
+  "name": "@distributed-compute/sdk",
+  "version": "0.1.0",
+  "description": "Official TypeScript & JavaScript Client SDK for Distributed Compute Marketplace",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@distributed-compute/shared-types": "^0.1.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5",
+    "vitest": "^1.6.0"
+  }
+}

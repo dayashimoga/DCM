@@ -1,0 +1,29 @@
+groups:
+  - name: compute-marketplace-alerts
+    rules:
+      - alert: ComputeNodeDroppedOffline
+        expr: compute_marketplace_nodes_online_gauge < 1
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "All compute nodes have dropped offline"
+          description: "No provider nodes are currently sending heartbeats to the scheduler."
+
+      - alert: HighJobFailureRate
+        expr: rate(compute_marketplace_jobs_failed_total[5m]) / (rate(compute_marketplace_jobs_submitted_total[5m]) + 0.001) > 0.10
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Workload failure rate exceeds 10%"
+          description: "High volume of customer jobs are exiting with non-zero return codes."
+
+      - alert: ApiHighP99Latency
+        expr: compute_marketplace_p99_latency_seconds > 0.500
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "API P99 Latency exceeds 500ms"
+          description: "Marketplace API gateway response latency has degraded."

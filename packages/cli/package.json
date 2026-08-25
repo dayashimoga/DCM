@@ -1,0 +1,19 @@
+{
+  "name": "@distributed-compute/cli",
+  "version": "0.1.0",
+  "description": "Official CLI Tool for Distributed Compute Marketplace",
+  "bin": {
+    "dcompute": "dist/index.js"
+  },
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@distributed-compute/sdk": "^0.1.0",
+    "@distributed-compute/shared-types": "^0.1.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5"
+  }
+}
