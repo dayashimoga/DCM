@@ -120,3 +120,54 @@ model Invoice {
   lineItems  Json
   createdAt  DateTime @default(now())
 }
+
+model Dispute {
+  id           String    @id @default(uuid())
+  jobId        String
+  customerId   String
+  providerId   String
+  reason       String
+  amountUsd    Decimal   @db.Decimal(10, 4)
+  status       String    @default("PENDING") // PENDING, RESOLVED_REFUNDED, RESOLVED_REJECTED
+  resolution   String?
+  refundAmount Decimal?  @db.Decimal(10, 4)
+  createdAt    DateTime  @default(now())
+  resolvedAt   DateTime?
+}
+
+model ApiKey {
+  id          String    @id @default(uuid())
+  userId      String
+  name        String
+  keyHash     String    @unique
+  prefix      String
+  permissions String[]  @default(["read", "write"])
+  lastUsedAt  DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+}
+
+model PayoutRecord {
+  id                 String   @id @default(uuid())
+  providerId         String
+  amountUsd          Decimal  @db.Decimal(10, 4)
+  feeUsd             Decimal  @db.Decimal(10, 4)
+  netAmountUsd       Decimal  @db.Decimal(10, 4)
+  destinationType    String   // BANK_STRIPE_CONNECT, CRYPTO_USDC, CRYPTO_SOL
+  destinationAddress String
+  status             String   @default("COMPLETED")
+  txHash             String?
+  createdAt          DateTime @default(now())
+}
+
+model EscrowHold {
+  id         String    @id @default(uuid())
+  jobId      String    @unique
+  customerId String
+  providerId String?
+  amountUsd  Decimal   @db.Decimal(10, 4)
+  status     String    @default("HELD") // HELD, SETTLED, REFUNDED
+  createdAt  DateTime  @default(now())
+  settledAt  DateTime?
+}
+
