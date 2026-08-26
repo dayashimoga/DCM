@@ -116,7 +116,7 @@ export default function ProviderDashboardPage() {
         pairingToken: mockToken,
         providerId: 'prov-mock',
         expiresInSeconds: 3600,
-        quickstartCommand: `podman run -d --name compute-agent --device nvidia.com/gpu=all -e PAIRING_TOKEN=${mockToken} ghcr.io/distributed-compute/agent:latest`,
+        quickstartCommand: `podman run -d --name compute-agent -e PAIRING_TOKEN=${mockToken} localhost/compute-agent:latest`,
       });
       setShowAddModal(true);
     } finally {

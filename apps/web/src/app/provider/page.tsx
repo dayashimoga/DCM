@@ -27,10 +27,9 @@ export default function ProviderOnboardingPage() {
 
   const runCommand = `podman run -d \\
   --name compute-agent \\
-  --device nvidia.com/gpu=all \\
   -e CONTROL_PLANE_URL=https://api.distributed.gpu \\
   -e PAIRING_TOKEN=ptk_sec_auto_gen \\
-  ghcr.io/distributed-compute/provider-agent:latest`;
+  localhost/compute-agent:latest`;
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(runCommand);
