@@ -2,6 +2,7 @@
 HTTP Client for Provider Agent communicating with Marketplace API Gateway
 """
 
+import time
 import logging
 from typing import Dict, Any, Optional, List
 import requests
@@ -55,6 +56,7 @@ class ApiClient:
         node_id: str,
         status: str,
         metrics: Dict[str, Any],
+        timestamp: Optional[float] = None,
     ) -> Dict[str, Any]:
         """
         Sends 15-second telemetry heartbeat pulse to maintain node online lease.
@@ -64,6 +66,7 @@ class ApiClient:
             "nodeId": node_id,
             "status": status,
             "metrics": metrics,
+            "timestamp": timestamp or time.time(),
         }
 
         try:

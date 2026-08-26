@@ -2,6 +2,8 @@ FROM docker.io/library/node:20-alpine AS base
 
 WORKDIR /app
 
+RUN apk add --no-cache openssl libc6-compat
+
 # Copy monorepo structure
 COPY package.json ./
 COPY packages/ ./packages/
