@@ -2,7 +2,7 @@
     "rate_limiting":  "120 req/min via ThrottlerGuard",
     "security_headers":  "Helmet CSP / HSTS / X-Frame-Options",
     "refresh_token_revocation":  "UUID jti single-use rotation + Redis blacklist",
-    "timestamp":  "2026-08-25T22:52:11Z",
+    "timestamp":  "2026-08-26T19:31:54Z",
     "status":  "PASS",
     "jwt_secret_insecure_defaults":  "ELIMINATED (Startup halts in production if missing)",
     "api_keys":  "SHA-256 hashed with dc_live_ prefix"

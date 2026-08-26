@@ -7,7 +7,7 @@
                           "DriverVersion":  "32.0.101.8132",
                           "AdapterRAM":  2147479552
                       },
-    "timestamp":  "2026-08-25T22:52:11Z",
+    "timestamp":  "2026-08-26T19:31:54Z",
     "blocker_reason":  "No physical NVIDIA GPU device or NVML driver present on host (detected Intel(R) Arc(TM) 130T GPU (8GB)). Hardware-level GPU_PHYSICAL_REAL certification is blocked until executed on a host with physical NVIDIA hardware.",
     "has_nvidia_hardware":  false,
     "physical_gpu_certification":  "BLOCKED",

@@ -1,7 +1,7 @@
 ﻿{
     "pdb_availability_guarantee":  "minAvailable: 2 maintained during rollout",
     "rolling_update_strategy":  "RollingUpdate (maxSurge: 25%, maxUnavailable: 0)",
-    "timestamp":  "2026-08-25T22:52:11Z",
+    "timestamp":  "2026-08-26T19:31:54Z",
     "status":  "PASS",
     "rollback_command":  "kubectl rollout undo deployment/api -n distributed-compute"
 }

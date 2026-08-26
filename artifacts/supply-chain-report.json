@@ -1,6 +1,6 @@
 ﻿{
     "reproducible_oci_builds":  "VERIFIED",
-    "timestamp":  "2026-08-25T22:52:11Z",
+    "timestamp":  "2026-08-26T19:31:54Z",
     "pinned_api_deployment_image":  "ghcr.io/distributed-compute/marketplace-api:v1.0.0",
     "vulnerabilities_in_app_code":  0,
     "base_images":  [
