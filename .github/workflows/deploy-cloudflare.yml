@@ -13,6 +13,9 @@ jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
     name: Build Next.js Static Export & Deploy to Cloudflare Pages
+    env:
+      CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -44,7 +47,7 @@ jobs:
           echo "Static export artifacts successfully generated in apps/web/out"
 
       - name: Ensure Cloudflare Pages Project Exists
-        if: ${{ secrets.CLOUDFLARE_API_TOKEN != '' && secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
+        if: env.CF_API_TOKEN != '' && env.CF_ACCOUNT_ID != ''
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -52,7 +55,7 @@ jobs:
           npx wrangler pages project create distributed-compute --production-branch=main || echo "Cloudflare Pages project distributed-compute exists or ready"
 
       - name: Deploy to Cloudflare Pages (When Secrets Configured)
-        if: ${{ secrets.CLOUDFLARE_API_TOKEN != '' && secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
+        if: env.CF_API_TOKEN != '' && env.CF_ACCOUNT_ID != ''
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -60,7 +63,7 @@ jobs:
           command: pages deploy apps/web/out --project-name=distributed-compute --branch=main --commit-dirty=true
 
       - name: Deployment Notice (When Cloudflare Secrets Pending)
-        if: ${{ secrets.CLOUDFLARE_API_TOKEN == '' || secrets.CLOUDFLARE_ACCOUNT_ID == '' }}
+        if: env.CF_API_TOKEN == '' || env.CF_ACCOUNT_ID == ''
         run: |
           echo "================================================================================="
           echo " NOTICE: Next.js static export build succeeded (18/18 routes ready in apps/web/out)."
