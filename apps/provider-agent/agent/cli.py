@@ -2,6 +2,7 @@
 CLI and Daemon Entrypoint for Provider Agent
 """
 
+import os
 import sys
 import time
 import json
@@ -189,11 +190,40 @@ def main() -> int:
 
     # run command (daemon)
     run_parser = subparsers.add_parser("run", help="Start provider agent daemon")
-    run_parser.add_argument("--token", type=str, help="Provider node pairing token")
-    run_parser.add_argument("--name", type=str, help="Custom node display name")
-    run_parser.add_argument("--rate", type=float, help="Custom hourly rate in USD")
-    run_parser.add_argument("--api-url", type=str, default="http://localhost:4000", help="API Gateway URL")
-    run_parser.add_argument("--sandbox", type=str, default="simulated", help="Container sandbox runtime (podman/docker/simulated)")
+    run_parser.add_argument(
+        "--token",
+        type=str,
+        default=os.environ.get("PAIRING_TOKEN") or os.environ.get("PROVIDER_PAIRING_TOKEN"),
+        help="Provider node pairing token (or set PAIRING_TOKEN env var)",
+    )
+    run_parser.add_argument(
+        "--name",
+        type=str,
+        default=os.environ.get("NODE_NAME"),
+        help="Custom node display name",
+    )
+    run_parser.add_argument(
+        "--rate",
+        type=float,
+        default=float(os.environ["HOURLY_RATE_USD"]) if "HOURLY_RATE_USD" in os.environ else None,
+        help="Custom hourly rate in USD",
+    )
+    run_parser.add_argument(
+        "--api-url",
+        type=str,
+        default=os.environ.get("CONTROL_PLANE_URL", "http://localhost:4000"),
+        help="API Gateway URL (or set CONTROL_PLANE_URL env var)",
+    )
+    run_parser.add_argument(
+        "--sandbox",
+        type=str,
+        default=os.environ.get("SANDBOX_RUNTIME", "simulated"),
+        help="Container sandbox runtime (podman/docker/simulated)",
+    )
+
+    # Auto-dispatch to run if invoked without arguments but with PAIRING_TOKEN in environment
+    if len(sys.argv) == 1 and (os.environ.get("PAIRING_TOKEN") or os.environ.get("PROVIDER_PAIRING_TOKEN")):
+        sys.argv.append("run")
 
     args = parser.parse_args()
 

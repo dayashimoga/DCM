@@ -10,4 +10,4 @@ COPY apps/provider-agent/ ./
 ENV PYTHONPATH=/app
 
 ENTRYPOINT ["python", "-m", "agent.cli"]
-CMD ["info"]
+CMD ["run"]
