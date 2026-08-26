@@ -1,7 +1,8 @@
 'use client';
 
 import React from 'react';
-import { Terminal, Shield, ArrowRight, DollarSign, CheckCircle2 } from 'lucide-react';
+import Link from 'next/link';
+import { Terminal, ArrowRight, DollarSign, CheckCircle2 } from 'lucide-react';
 
 export const ProviderCTA: React.FC = () => {
   return (
@@ -23,7 +24,7 @@ export const ProviderCTA: React.FC = () => {
 
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(clamp(280px, 30vw, 360px), 1fr))',
         gap: '48px',
         alignItems: 'center',
       }}>
@@ -41,7 +42,7 @@ export const ProviderCTA: React.FC = () => {
           }}>
             <DollarSign size={15} /> Monetize Idle Hardware
           </div>
-          <h2 style={{ fontSize: '36px', fontWeight: 800, lineHeight: 1.2, marginBottom: '16px' }}>
+          <h2 style={{ fontSize: 'clamp(26px, 3.5vw, 36px)', fontWeight: 800, lineHeight: 1.2, marginBottom: '16px' }}>
             Earn Passive Income with Your <span className="gradient-text">GPU & CPU Fleet</span>
           </h2>
           <p style={{ color: 'var(--text-secondary)', fontSize: '15px', lineHeight: 1.7, marginBottom: '24px' }}>
@@ -64,12 +65,12 @@ export const ProviderCTA: React.FC = () => {
           </div>
 
           <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
-            <button className="btn btn-primary" style={{ padding: '12px 24px', fontSize: '15px' }}>
+            <Link href="/provider" className="btn btn-primary" style={{ padding: '12px 24px', fontSize: '15px' }}>
               Register as Provider <ArrowRight size={16} />
-            </button>
-            <button className="btn btn-secondary" style={{ padding: '12px 24px', fontSize: '15px' }}>
+            </Link>
+            <Link href="/developers" className="btn btn-secondary" style={{ padding: '12px 24px', fontSize: '15px' }}>
               <Terminal size={16} /> View Agent Docs
-            </button>
+            </Link>
           </div>
         </div>
 
@@ -82,6 +83,7 @@ export const ProviderCTA: React.FC = () => {
           fontFamily: 'Consolas, Monaco, Courier New, monospace',
           fontSize: '13px',
           boxShadow: '0 20px 40px rgba(0, 0, 0, 0.6)',
+          overflowX: 'auto',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: '12px' }}>
             <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#ef4444' }} />

@@ -158,7 +158,7 @@ export default function WorkloadsDashboardPage() {
       </div>
 
       {/* Main Grid: Jobs List + Live Terminal Inspector */}
-      <div style={{ display: 'grid', gridTemplateColumns: '380px 1fr', gap: '28px', alignItems: 'start' }}>
+      <div className="workloads-layout-grid">
         {/* Left Side: Jobs History List */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>

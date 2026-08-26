@@ -26,7 +26,7 @@ export default function HomePage() {
         </div>
 
         <h1 style={{
-          fontSize: '56px',
+          fontSize: 'clamp(32px, 5.5vw, 56px)',
           fontWeight: 900,
           lineHeight: 1.1,
           letterSpacing: '-1.5px',
@@ -37,7 +37,7 @@ export default function HomePage() {
         </h1>
 
         <p style={{
-          fontSize: '18px',
+          fontSize: 'clamp(15px, 2vw, 18px)',
           color: 'var(--text-secondary)',
           maxWidth: '680px',
           margin: '0 auto 36px auto',

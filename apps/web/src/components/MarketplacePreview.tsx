@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useState } from 'react';
-import { Cpu, HardDrive, Zap, Star, ShieldCheck, Filter, ArrowRight } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
+import { Cpu, Zap, ShieldCheck, ArrowRight, ShieldAlert, CheckCircle2 } from 'lucide-react';
 
-interface MockNode {
+interface DisplayNode {
   id: string;
   name: string;
   gpuModel: string;
@@ -18,12 +19,13 @@ interface MockNode {
   reliabilityScore: number;
   region: string;
   status: 'ONLINE' | 'BUSY';
+  isLive: boolean;
 }
 
-const mockNodes: MockNode[] = [
+const fallbackNodes: DisplayNode[] = [
   {
-    id: 'node-01',
-    name: 'US-East-H100-Ultra',
+    id: 'node-preview-01',
+    name: 'US-East-H100-OctaFleet',
     gpuModel: 'NVIDIA H100 80GB HBM3',
     gpuCount: 8,
     vramGb: 640,
@@ -36,9 +38,10 @@ const mockNodes: MockNode[] = [
     reliabilityScore: 99.9,
     region: 'us-east (Virginia)',
     status: 'ONLINE',
+    isLive: false,
   },
   {
-    id: 'node-02',
+    id: 'node-preview-02',
     name: 'EU-Central-A100-Dual',
     gpuModel: 'NVIDIA A100 80GB SXM4',
     gpuCount: 2,
@@ -52,9 +55,10 @@ const mockNodes: MockNode[] = [
     reliabilityScore: 99.7,
     region: 'eu-central (Frankfurt)',
     status: 'ONLINE',
+    isLive: false,
   },
   {
-    id: 'node-03',
+    id: 'node-preview-03',
     name: 'AP-Tokyo-RTX4090-Pro',
     gpuModel: 'NVIDIA GeForce RTX 4090',
     gpuCount: 4,
@@ -68,9 +72,10 @@ const mockNodes: MockNode[] = [
     reliabilityScore: 98.9,
     region: 'ap-northeast (Tokyo)',
     status: 'ONLINE',
+    isLive: false,
   },
   {
-    id: 'node-04',
+    id: 'node-preview-04',
     name: 'US-West-L40S-HighMem',
     gpuModel: 'NVIDIA L40S 48GB',
     gpuCount: 1,
@@ -84,15 +89,62 @@ const mockNodes: MockNode[] = [
     reliabilityScore: 99.4,
     region: 'us-west (Oregon)',
     status: 'ONLINE',
+    isLive: false,
   },
 ];
 
 export const MarketplacePreview: React.FC = () => {
+  const [nodes, setNodes] = useState<DisplayNode[]>(fallbackNodes);
   const [filterGpu, setFilterGpu] = useState('ALL');
+  const [isLiveFeed, setIsLiveFeed] = useState<boolean>(false);
+
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadMarketplace = async () => {
+      try {
+        const res = await fetch(`${apiUrl}/marketplace/nodes`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.nodes && data.nodes.length > 0 && isMounted) {
+            const mapped: DisplayNode[] = data.nodes.map((n: any) => ({
+              id: n.id,
+              name: n.name || 'Verified Compute Node',
+              gpuModel: n.gpus?.[0]?.model || 'Standard Accelerator',
+              gpuCount: n.gpus?.[0]?.count || 1,
+              vramGb: (n.gpus?.[0]?.vramGb || 24) * (n.gpus?.[0]?.count || 1),
+              cpuModel: n.cpu?.model || 'High Performance CPU',
+              cpuCores: n.cpu?.cores || 16,
+              ramGb: n.ramGb || 64,
+              diskGb: n.diskGb || 500,
+              hourlyRateUsd: n.hourlyRateUsd || 1.50,
+              benchmarkScore: n.benchmarkScore || 750,
+              reliabilityScore: n.reliabilityScore || 99.0,
+              region: 'global-decentralized',
+              status: n.status === 'ONLINE' ? 'ONLINE' : 'BUSY',
+              isLive: true,
+            }));
+            setNodes(mapped);
+            setIsLiveFeed(true);
+            return;
+          }
+        }
+      } catch {
+        // Fallback gracefully to simulated tier inventory
+      }
+      if (isMounted) {
+        setIsLiveFeed(false);
+      }
+    };
+
+    loadMarketplace();
+    return () => { isMounted = false; };
+  }, [apiUrl]);
 
   const filteredNodes = filterGpu === 'ALL'
-    ? mockNodes
-    : mockNodes.filter(n => n.gpuModel.toLowerCase().includes(filterGpu.toLowerCase()));
+    ? nodes
+    : nodes.filter(n => n.gpuModel.toLowerCase().includes(filterGpu.toLowerCase()));
 
   return (
     <section id="marketplace" style={{ margin: '60px 0' }}>
@@ -101,9 +153,18 @@ export const MarketplacePreview: React.FC = () => {
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: 'var(--accent-cyan)', fontSize: '13px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px' }}>
             <Zap size={14} /> Real-Time Compute Market
           </div>
-          <h2 style={{ fontSize: '32px', fontWeight: 800, letterSpacing: '-0.5px' }}>
+          <h2 style={{ fontSize: 'clamp(24px, 3.5vw, 32px)', fontWeight: 800, letterSpacing: '-0.5px' }}>
             Available Distributed Compute Nodes
           </h2>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
+            <span className={`badge ${isLiveFeed ? 'badge-online' : 'badge-busy'}`} style={{ fontSize: '11px' }}>
+              {isLiveFeed ? (
+                <><CheckCircle2 size={12} /> AUTHORITATIVE LIVE DATABASE FEED</>
+              ) : (
+                <><ShieldAlert size={12} /> SIMULATED INVENTORY (Real Hardware Verification Pending)</>
+              )}
+            </span>
+          </div>
         </div>
 
         {/* Filter Pills */}
@@ -128,14 +189,16 @@ export const MarketplacePreview: React.FC = () => {
       </div>
 
       {/* Grid of Nodes */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '24px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(clamp(280px, 28vw, 360px), 1fr))', gap: '24px' }}>
         {filteredNodes.map((node) => (
           <div key={node.id} className="glass-panel" style={{ padding: '28px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
             <div>
               {/* Header */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-                <span className="badge badge-online">● {node.status}</span>
-                <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{node.region}</span>
+                <span className={`badge ${node.status === 'ONLINE' ? 'badge-online' : 'badge-busy'}`}>● {node.status}</span>
+                <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                  {node.isLive ? 'LIVE NODE' : 'SIMULATED TIER'} • {node.region}
+                </span>
               </div>
 
               {/* Title & GPU */}
@@ -192,9 +255,9 @@ export const MarketplacePreview: React.FC = () => {
                   <ShieldCheck size={12} /> {node.reliabilityScore}% reliability
                 </div>
               </div>
-              <button className="btn btn-primary" style={{ padding: '8px 16px', fontSize: '13px' }}>
+              <Link href={`/workloads/submit?nodeId=${node.id}`} className="btn btn-primary" style={{ padding: '8px 16px', fontSize: '13px' }}>
                 Rent Now <ArrowRight size={14} />
-              </button>
+              </Link>
             </div>
           </div>
         ))}

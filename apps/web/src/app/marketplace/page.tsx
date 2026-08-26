@@ -231,7 +231,7 @@ export default function MarketplacePage() {
       </div>
 
       {/* Main Layout: Sidebar Filters + Results Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: '32px', alignItems: 'start' }}>
+      <div className="marketplace-layout-grid">
         {/* Sidebar Filters */}
         <aside className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
